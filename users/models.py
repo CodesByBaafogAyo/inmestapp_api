@@ -1,38 +1,65 @@
+from datetime import timezone
 from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.dispatch import receiver
+from django.db.models.signals import post_save
+from rest_framework.authtoken.models import Token
+from django.utils import timezone
 
-# Create your models here.
-class IMUser(models.Model):
-    class UserType(models.TextChoices):
-        EIT = "EIT",
-        TEACHING_FELLOW = "TEACHING_FELLOW",
-        ADMIN_STAFF = "ADMIN_STAFF",
-        ADMIN = "ADMIN"
-        
-    first_name = models.CharField(max_length = 64, blank=True, null = True)
-    last_name = models.CharField(max_length = 64, blank=True, null = True)
-    is_active = models.BooleanField(default = True)
-    user_type = models.CharField(choices = UserType.choices, default = UserType.EIT, max_length = 20)
-    date_created = models.DateTimeField(auto_now_add = True, blank=True, null = True)
-    date_modified = models.DateTimeField(auto_now=True, blank=True, null = True)
-    email = models.EmailField(max_length = 64)
+class IMUser(AbstractUser):
+    USER_TYPES = (
+        ('EIT', 'EIT'),
+        ('TEACHING_FELLOW', 'TEACHING FELLOW'),
+        ('ADMIN_STAFF', 'ADMINISTRATIVE STAFF'),
+        ('ADMIN', 'ADMINSTRATOR'),
+    )
+    first_name = models.CharField(max_length=155, blank=True, default="")
+    last_name = models.CharField(max_length=155, blank=True, default="")
+    middle_name = models.CharField(max_length=155, blank=True, default="")
+    phone_number = models.CharField(max_length=20, blank=True, default="")
+    unique_code = models.CharField(max_length=20, blank=True)
+    temporal_login_fails = models.IntegerField(default=0)
+    permanent_login_fails = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    is_blocked = models.BooleanField(default=False)
+    user_type = models.CharField(max_length=20, choices=USER_TYPES, null=True)
+    date_modified = models.DateTimeField(default=timezone.now)
+    date_created = models.DateTimeField(default=timezone.now)
     
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+@receiver(post_save, sender=IMUser)
+def generate_auth_token(sender, instance=None, created=False, **kwargs):
+    if created:
+        token = Token.objects.create(user=instance)
+        token.save()
+
+# Set a default value for the 'password' field
+IMUser._meta.get_field('password').default = timezone.now
+
+
 class Cohort(models.Model):
-    name = models.CharField(max_length = 64, blank=True, null = True)
-    description = models.TextField(default='N/A', blank=True, null = True)
-    year = models.IntegerField(default = 1920)
-    start_date = models.DateTimeField(blank=True, null = True)
-    end_date = models.DateTimeField(blank=True, null = True)
-    is_active = models.BooleanField(default = True)
-    date_created = models.DateTimeField(auto_now_add = True, blank=True, null = True)
-    date_modified = models.DateTimeField(auto_now=True, blank=True, null = True)
-    author = models.ForeignKey(IMUser, on_delete=models.CASCADE, related_name = "cohort_author" )
-    
+    name = models.CharField(max_length=255, default = "")
+    description = models.TextField(blank=True, default = "")
+    year = models.IntegerField()
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_active = models.BooleanField(default=True)
+    date_created = models.DateTimeField(default=timezone.now)
+    date_modified = models.DateTimeField(default=timezone.now)
+    author = models.ForeignKey(IMUser, related_name="cohort_author", on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.name} ({self.year})"
     
 class CohortMember(models.Model):
-    cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name = "cohortmember_cohort")
-    member = models.ForeignKey(IMUser, on_delete=models.CASCADE, related_name = "cohortmember_member")
-    is_active = models.BooleanField(default = True)
-    date_created = models.DateTimeField(auto_now_add = True, blank=True, null = True)
-    date_modified = models.DateTimeField(auto_now=True, blank=True, null = True)
-    author = models.ForeignKey(IMUser, on_delete=models.CASCADE, related_name = "cohormember_author" )
+    cohort = models.ForeignKey(Cohort, on_delete=models.CASCADE, related_name='cohort')
+    member = models.ForeignKey(IMUser, on_delete=models.CASCADE, related_name='cohort_member')
+    is_active = models.BooleanField(default=True)
+    date_created = models.DateTimeField(default=timezone.now)
+    date_modified = models.DateTimeField(default=timezone.now)
+    author = models.ForeignKey(IMUser, on_delete=models.CASCADE)
 
+    def __str__(self):
+        return f"{self.member.first_name} {self.member.last_name} ({self.cohort.name})"
